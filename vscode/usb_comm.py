@@ -1,7 +1,7 @@
 import usb
-import usb.backend.libusb0 as libusb0
 import struct
-import binascii
+import time
+import sys
 
 def usb_write(device, msg):
     r = b'\xcb'
@@ -9,7 +9,7 @@ def usb_write(device, msg):
     device.write(0x01,dx,1000) # bulk out
 
 def usb_read(device):
-    data = device.read(0x81,100,1000) # bulk in
+    data = device.read(0x81,64,1000) # bulk in
     b = bytes(bytearray(data))
     prot, rx_sz, tx_sz = struct.unpack('>3xc2h', data[0:8])
     print('0x'+prot.hex(), rx_sz, tx_sz)
@@ -48,10 +48,20 @@ def iso14443a_off(device):
 
 
 dev = usb.core.find(idProduct = 0x3721)
+i = dev[0].interfaces()[0].bInterfaceNumber
+
 if dev is None:
     raise ValueError('Our device is not connected')
 else:
     print("Device connected")
+
+## SECTION: this should be on Ubuntu; not required for Windows
+if dev.is_kernel_driver_active(i):
+    try:
+        dev.detach_kernel_driver(i)
+    except usb.core.USBError as e:
+        sys.exit("Could not detatch kernel driver from interface({0}): {1}".format(i, str(e)))
+##
 
 dev.set_configuration()
 cfg = dev.get_active_configuration()
@@ -61,13 +71,12 @@ ep_in = intf[0]
 ep_out = intf[1]
 print(ep_out)
 
-print('reading register 0x23')
-read_reg_x23(dev)
-
 for i in range(10):
+    read_reg_x23(dev) # should be sent don't remove
     iso14443a_on(dev)
     rfid_on(dev)
     ids =  rfid_read(dev)
     print(' '.join(hex(x) for x in ids))
     iso14443a_off(dev)
     rfid_off(dev)
+    time.sleep(1)
