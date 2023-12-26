@@ -1,0 +1,284 @@
+ Exact description of chaining of HID reports and stuff are given in file st_stream.h
+  Over USB each payload will have a header. With the above rxSize and
+  assuming just one command transmitted in one stream which expects an answer the OUT report will look like this:
+  <table>
+    <tr><th>   Byte</th><th>  0</th><th>       1</th><th>       2<th>       3</th><th>      4     </th><th>      5     </th><th>      6     </th><th>      7     </th><th> 8..8+rxSize-1</th></tr>
+    <tr><th>Content</th><td>TID</td><td>length  </td><td>reserved<td>protocol</td><td>tx-prot MSB </td><td>tx-prot LSB </td><td>rx-prot MSB </td><td>rx-prot LSB </td><td>data</td></tr>
+    <tr><th>Content</th><td>TID</td><td>rxSize+5</td><td>    0x00<td>    0x44</td><td>rxSize   MSB</td><td>rxSize   LSB</td><td>txSize   MSB</td><td>txSize   LSB</td><td>rxData[0..rxSize-1]</td></tr>
+  </table>
+  where
+  <ul>
+    <li> \e TID : arbitrary unique transaction ID, can be a counter
+    <li> \e rxSize: the expected size of data this command will/is allowed to return.
+  </ul>
+  The response to such an OUT report will be an IN report looking like this:
+  <table>
+    <tr><th>   Byte</th><th>  0</th><th>   1    </th><th>         2</th><th>       3</th><th>       4</th><th>      5</th><th>      6    </th><th>      7    </th><th> 8..8+txSize-1     </th></tr>
+    <tr><th>Content</th><td>TID</td><td>length  </td><td>HID status</td><td>protocol</td><td>reserved</td><td>status </td><td>tx-prot MSB</td><td>tx-prot LSB</td><td>data               </td></tr>
+    <tr><th>Content</th><td>TID</td><td>txSize+5</td><td>   ret_val</td><td>0x44    </td><td>       0</td><td>ret_val</td><td>txSize MSB </td><td>txSize LSB </td><td>txData[0..txSize-1]</td></tr>
+  </table>
+  where
+
+  Example for an antenna calibration command:
+
+  OUT:
+  <table>
+    <tr><th>   Byte</th><th>  0  </th><th>   1  </th><th>       2</th><th>      3</th><th>      4</th><th>      5</th><th>      6</th><th> 7       </th><th>        7</th></tr>
+    <tr><th>Content</th><td>TID  </td><td>length</td><td>protocol</td><td>tx-prot</td><td>tx-prot</td><td>rx-prot</td><td>rx-prot</td><td>rxData[0]</td><td>rxData[1]</td></tr>
+    <tr><td>Content</td><td>0x1F </td><td>0x07  </td><td>0x44    </td><td>0x00   </td><td>0x02   </td><td>0x00   </td><td>0x01   </td><td>0x15     </td><td>0xD8     </td></tr>
+  </table>
+  where:<ul>
+  <li> 0x15: cmd id for #processDirectCommand()
+  <li> 0xd8: the sub command #ST25R3911_CMD_CALIBRATE_ANTENNA
+  </ul>
+  The reader answer with this report:
+  <table>
+    <tr><th>   Byte</th><th>  0 </th><th>   1  </th><th>     2    </th><th>       3</th><th>     4  </th><th>     5</th><th>    6  </th><th>  7    </th><th> 8       </th></tr>
+    <tr><th>Content</th><td>TID </td><td>length</td><td>HID status</td><td>protocol</td><td>reserved</td><td>status</td><td>tx-prot</td><td>tx-prot</td><td>txData[0]</td></tr>
+    <tr><td>Content</td><td>0xFD</td><td>0x06  </td><td>    0x00  </td><td>0x44    </td><td>0x00    </td><td>0x00  </td><td>0x00   </td><td>  1    </td><td>0x60     </td></tr>
+  </table>
+  <ul>
+  <li> 0x60: the data this command produced (content of ST25R3911_REG_ANT_CAL_RESULT)
+  <li> 0x00: status 0 : ERR_NONE
+  </ul>
+
+  Implemented commands:
+
+  -  #processProtocols()
+  -  #processInterruptResult()
+  -  #processDirectCommand() see details in the function
+  -  Enable automatic Testmode on pins CSI and CSO
+      <table>
+      <tr><th>   Byte</th><th>       0</th><th>                      1</th><th>       2 </th></tr>
+      <tr><th>Content</th><td>0x17(ID)</td><td>enable(true=1, false=0)</td><td>test mode</td></tr>
+    </table>
+    test mode: Value for Test Register 0x01 (Analog Test and Observation Register)
+  - #iso14443TransmitAndReceive()
+    <table>
+      <tr><th>   Byte</th><th>       0</th><th>1..rxSize</th></tr>
+      <tr><th>Content</th><td>0x18(ID)</td><td>data to be transmitted</td></tr>
+    </table>
+    #iso14443TransmitAndReceive() is called to sent rxSize-1 bytes and receive at most *txSize-4 bytes.
+    *txSize is adjusted to the actual received data length + 4.
+    <table>
+      <tr><th>   Byte</th><th>0..3</th><th>4..*txSize</th></tr>
+      <tr><th>Content</th><td>passed microseconds for #iso14443TransmitAndReceive()</td><td>received data buffer</td></tr>
+    </table>
+  - #st25r3911SetBitrate()
+    <table>
+      <tr><th>   Byte</th><th>       0</th><th>                  1</th><th>                  2</th></tr>
+      <tr><th>Content</th><td>0x19(ID)</td><td>rx bitrate r:2^r*106kBit</td><td>tx bitrate t:2^t*106kBit</td></tr>
+    </table>
+    no response except status.
+  - Measure antenna amplitude and phase.
+    <table>
+      <tr><th>   Byte</th><th>       0</th></tr>
+      <tr><th>Content</th><td>0x20(ID)</td></tr>
+    </table>
+    #st25r3911MeasureRF() and st25r3911MeasureAntennaResonance() get called.
+    *txSize must be >= 2, response is:
+    <table>
+      <tr><th>   Byte</th><th>0</th><th>1</th></tr>
+      <tr><th>Content</th><td>result of #st25r3911MeasureRF()</td><td>result of #st25r3911MeasureAntennaResonance()</td></tr>
+    </table>
+  - Enable/Disable RF field
+    <table>
+      <tr><th>   Byte</th><th>       0</th><th>       1</th></tr>
+      <tr><th>Content</th><td>0x22(ID)</td><td>on</td></tr>
+    </table>
+    where \e on is a boolean value denoting if the field should be turned on(1) or off(0).
+    returns status ERR_RF_COLLISION if field could not be turned on.
+  -  Read automatic Testmode
+    <table>
+      <tr><th>   Byte</th><th>       0</th></tr>
+      <tr><th>Content</th><td>0x23(ID)</td></tr>
+    </table>
+     txSize must be >=2, response is:
+      <table>
+      <tr><th>   Byte</th><th>    1  </th><th>       2 </th></tr>
+      <tr><th>Content</th><td>enabled</td><td>test mode</td></tr>
+    </table>
+    enabled: true = 1,  false=0; test mode: Value of Test Register 0x01 (Analog Test and Observation Register)
+
+  -  RFAL Initialize
+    <table>
+      <tr><th>   Byte</th><th>       0</th></tr>
+      <tr><th>Content</th><td>0x40(ID)</td></tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Calibrate
+    <table>
+      <tr><th>   Byte</th><th>       0</th></tr>
+      <tr><th>Content</th><td>0x41(ID)</td></tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Deinitialize
+    <table>
+      <tr><th>   Byte</th><th>       0</th></tr>
+      <tr><th>Content</th><td>0x42(ID)</td></tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Set Mode
+    <table>
+      <tr><th>   Byte</th><th>       0</th><th>       1</th><th>       2</th><th>       3</th></tr>
+      <tr><th>Content</th><td>0x43(ID)</td> <td>Mode</td> <td>Tx bit rate</td> <td>Rx bit rate</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Set Bitrate
+    <table>
+      <tr><th>   Byte</th><th>       0</th><th>       1</th><th>       2</th></tr>
+      <tr><th>Content</th><td>0x45(ID)</td> <td>Tx bit rate</td> <td>Rx bit rate</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Set FDT Poll
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1..4</th> </tr>
+      <tr><th>Content</th><td>0x47(ID)</td> <td>FDT Poll</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Set FDT Listen
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1..4</th> </tr>
+      <tr><th>Content</th><td>0x49(ID)</td> <td>FDT Listen</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Set GT
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1..4</th> </tr>
+      <tr><th>Content</th><td>0x4B(ID)</td> <td>GT</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Field On and Start GT
+    <table>
+      <tr><th>   Byte</th> <th>0</th> </tr>
+      <tr><th>Content</th><td>0x4D(ID)</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Field Off
+    <table>
+      <tr><th>   Byte</th> <th>0</th> </tr>
+      <tr><th>Content</th><td>0x4E(ID)</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified.
+
+  -  RFAL Start Transceive
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1..2</th> <th>3..3+txLen</th> <th>3+txLen+1 .. 3+txLen+4</th> <th>3+txLen+5 .. 3+txLen+8</th> </tr>
+      <tr><th>Content</th><td>0x4F(ID)</td> <td>txLen</td> <td>txData</td> <td>flags</td> <td>FWT</td>  </tr>
+    </table>
+     returns status ERR_NONE if no error was identified.
+
+  -  RFAL Get Transceive Status
+    <table>
+      <tr><th>   Byte</th> <th>0</th> </tr>
+      <tr><th>Content</th><td>0x50(ID)</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th><th>    0..1  </th><th> 2..2+rxLen </th></tr>
+      <tr><th>Content</th><td>rxLen</td><td>rxData</td></tr>
+    </table>
+
+  -  RFAL Transceive ISO14443A Short Frame
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th> <th>2..5</th> </tr>
+      <tr><th>Content</th><td>0x51(ID)</td> <td>command(REQA/WUPA)</td> <td>FWT</td> </tr>
+    </table>
+     returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th> <th>0..1 </th> <th> 2..2+rxLen </th></tr>
+      <tr><th>Content</th> <td>rxLen</td> <td>rxData      </td> </tr>
+    </table>
+
+  -  RFAL Transceive ISO14443A Anticollision Frame
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th> <th>2</th> <th>3..6</th> <th>7..txLen</th> </tr>
+      <tr><th>Content</th><td>0x52(ID)</td> <td>bytesToSend</td> <td>bitsToSend</td> <td>FWT</td> <td>txData</td> </tr>
+    </table>
+     returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th> <th>2..3</th> <th>4..4+rxLength</th> </tr>
+      <tr><th>Content</th> <td>bytesReceived</td> <td>bitsReceived</td> <td>rxLength</td> <td>rxData      </td> </tr>
+    </table>
+
+  -  RFAL FeliCa Poll
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th> <th>2..3</th> <th>4</th> <th>5</th> </tr>
+      <tr><th>Content</th><td>0x53(ID)</td> <td>numSlots</td> <td>SystemCode</td> <td>RequestCode</td> <td>PollResListSize</td> </tr>
+    </table>
+     returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th> <th>2..3</th> <th>4..4+rxLength</th> </tr>
+      <tr><th>Content</th> <td>devicesDetected</td> <td>CollisionsDetected</td> <td>PollResList</td> <td>rxData      </td> </tr>
+    </table>
+
+  -  RFAL ISO15693 Transceive Anticollision Frame
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th> <th>2..2+txLen</th> </tr>
+      <tr><th>Content</th><td>0x54(ID)</td> <td>txLength</td> <td>txData</td> </tr>
+    </table>
+     returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th><th>0..1 </th> <th> 2..2+rxLen </th></tr>
+      <tr><th>Content</th><td>rxLen</td> <td>rxData</td> </tr>
+    </table>
+
+  -  RFAL ISO15693 Transceive Anticollision EOF
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th>  </tr>
+      <tr><th>Content</th> <td>0x55(ID)</td> </tr>
+    </table>
+     returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th><th>0..1 </th> <th> 2..2+rxLen </th></tr>
+      <tr><th>Content</th><td>rxLen</td> <td>rxData</td> </tr>
+    </table>
+
+  -  RFAL ISO15693 Transceive EOF
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1</th>  </tr>
+      <tr><th>Content</th> <td>0x56(ID)</td> </tr>
+    </table>
+     returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th><th>0..1 </th> <th> 2..2+rxLen </th></tr>
+      <tr><th>Content</th><td>rxLen</td> <td>rxData</td> </tr>
+    </table>
+
+  -  RFAL Transceive Blocking Tx
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1..2</th> <th>3..3+txLen</th> <th>3+txLen+1 .. 3+txLen+4</th> <th>3+txLen+5 .. 3+txLen+8</th> </tr>
+      <tr><th>Content</th><td>0x57(ID)</td> <td>txLen</td> <td>txData</td> <td>flags</td> <td>FWT</td>  </tr>
+    </table>
+     returns status ERR_NONE if no error was identified.
+
+  -  RFAL Transceive Blocking Tx
+    <table>
+      <tr><th>   Byte</th> <th>0</th> </tr>
+      <tr><th>Content</th><td>0x58(ID)</td> </tr>
+    </table>
+     txSize must be >=2, returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th><th>    0..1  </th><th> 2..2+rxLen </th></tr>
+      <tr><th>Content</th><td>rxLen</td><td>rxData</td></tr>
+    </table>
+
+  -  RFAL Transceive Blocking TxRx
+    <table>
+      <tr><th>   Byte</th> <th>0</th> <th>1..2</th> <th>3..3+txLen</th> <th>3+txLen+1 .. 3+txLen+4</th> <th>3+txLen+5 .. 3+txLen+8</th> <th>3+txLen+9 .. 3+txLen+10</th> </tr>
+      <tr><th>Content</th><td>0x59(ID)</td> <td>txLen</td> <td>txData</td> <td>flags</td> <td>FWT</td> <td>rxBufSize</td> </tr>
+    </table>
+     returns status ERR_NONE if no error was identified and response is:
+    <table>
+      <tr><th>   Byte</th><th>    0..1  </th><th> 2..2+rxLen </th></tr>
+      <tr><th>Content</th><td>rxLen</td><td>rxData</td></tr>
+    </table>
