@@ -72,11 +72,11 @@ ep_out = intf[1]
 print(ep_out)
 
 for i in range(10):
-    read_reg_x23(dev) # should be sent don't remove
-    iso14443a_on(dev)
+    # read_reg_x23(dev) # should be sent don't remove
+    # iso14443a_on(dev)
     rfid_on(dev)
     ids =  rfid_read(dev)
     print(' '.join(hex(x) for x in ids))
     iso14443a_off(dev)
-    rfid_off(dev)
+    # rfid_off(dev)
     time.sleep(1)
