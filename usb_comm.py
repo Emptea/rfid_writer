@@ -56,11 +56,11 @@ else:
     print("Device connected")
 
 ## SECTION: this should be on Ubuntu; not required for Windows
-if dev.is_kernel_driver_active(i):
-    try:
-        dev.detach_kernel_driver(i)
-    except usb.core.USBError as e:
-        sys.exit("Could not detatch kernel driver from interface({0}): {1}".format(i, str(e)))
+# if dev.is_kernel_driver_active(i):
+#     try:
+#         dev.detach_kernel_driver(i)
+#     except usb.core.USBError as e:
+#         sys.exit("Could not detatch kernel driver from interface({0}): {1}".format(i, str(e)))
 ##
 
 dev.set_configuration()
