@@ -55,13 +55,13 @@ if dev is None:
 else:
     print("Device connected")
 
-## SECTION: this should be on Ubuntu; not required for Windows
-# if dev.is_kernel_driver_active(i):
-#     try:
-#         dev.detach_kernel_driver(i)
-#     except usb.core.USBError as e:
-#         sys.exit("Could not detatch kernel driver from interface({0}): {1}".format(i, str(e)))
-##
+
+if sys.platform.startswith('linux') and dev.is_kernel_driver_active(i):    
+    try:
+        dev.detach_kernel_driver(i)
+    except usb.core.USBError as e:
+        sys.exit("Could not detatch kernel driver from interface({0}): {1}".format(i, str(e)))
+
 
 dev.set_configuration()
 cfg = dev.get_active_configuration()
@@ -77,3 +77,4 @@ for i in range(10):
     print(' '.join(hex(x) for x in ids))
     iso14443a_off(dev)
     time.sleep(1)
+    
